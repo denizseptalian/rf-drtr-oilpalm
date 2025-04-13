@@ -1,3 +1,4 @@
 streamlit
-inference-sdk
+inference
 Pillow
+opencv-python
