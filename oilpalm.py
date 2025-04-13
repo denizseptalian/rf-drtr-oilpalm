@@ -5,27 +5,47 @@ from PIL import Image
 from collections import Counter
 import os
 
-# Simulasi hasil deteksi dummy
-def mock_draw_results(image):
-    img = np.array(image.convert("RGB"))
-    class_counts = Counter({"Matang": 3, "Mengkal": 1, "Mentah": 2})  # Contoh deteksi
+# Import YOLOv8
+from ultralytics import YOLO
 
-    h, w, _ = img.shape
-    cv2.rectangle(img, (10, 10), (w // 3, h // 4), (0, 255, 0), 2)
-    cv2.putText(img, "Matang: 0.85", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+# Load model hanya sekali
+@st.cache_resource
+def load_model():
+    model = YOLO("best.pt")
+    return model
+
+def predict_image(model, image):
+    image = np.array(image.convert("RGB"))
+    results = model(image)
+    return results
+
+def draw_results(image, results):
+    img = np.array(image.convert("RGB"))
+    class_counts = Counter()
+
+    for result in results:
+        boxes = result.boxes
+        names = result.names
+
+        for box in boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+            class_id = int(box.cls[0].item())
+            label = f"{names[class_id]}: {box.conf[0]:.2f}"
+
+            class_counts[names[class_id]] += 1
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
     return img, class_counts
 
 # UI Aplikasi
 st.title("Deteksi dan Klasifikasi Kematangan Buah Sawit")
 
-# Coba tampilkan gambar ilustrasi jika ada
+# Tampilkan ilustrasi jika tersedia
 if os.path.exists("Buah-Kelapa-Sawit.jpg"):
     st.image("Buah-Kelapa-Sawit.jpg", use_container_width=True)
-else:
-    st.info("Gambar ilustrasi tidak ditemukan. Lewati bagian ini.")
 
-# Pilihan metode input
+# Pilihan input
 option = st.radio("Pilih metode input gambar:", ("Upload Gambar", "Gunakan Kamera"))
 
 image = None
@@ -42,13 +62,15 @@ elif option == "Gunakan Kamera":
         image = Image.open(camera_file)
         st.image(image, caption="Gambar dari Kamera", use_container_width=True)
 
-# Tombol prediksi dummy
+# Prediksi
 if image and st.button("Prediksi"):
-    st.warning("Model YOLOv8 belum tersedia. Menampilkan hasil simulasi prediksi.")
+    with st.spinner("Sedang memproses prediksi..."):
+        model = load_model()
+        results = predict_image(model, image)
+        processed_image, class_counts = draw_results(image, results)
 
-    processed_image, class_counts = mock_draw_results(image)
-    st.image(processed_image, caption="Hasil Deteksi (Simulasi)", use_container_width=True)
+        st.image(processed_image, caption="Hasil Deteksi", use_container_width=True)
 
-    st.subheader("Jumlah Objek per Kelas (Simulasi)")
-    for class_name, count in class_counts.items():
-        st.write(f"{class_name}: {count}")
+        st.subheader("Jumlah Objek per Kelas")
+        for class_name, count in class_counts.items():
+            st.write(f"{class_name}: {count}")
