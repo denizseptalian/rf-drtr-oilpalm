@@ -1,29 +1,50 @@
 import streamlit as st
-from inference_sdk import InferenceHTTPClient
+import cv2
+import numpy as np
 from PIL import Image
+from collections import Counter
 
-# Inisialisasi client Roboflow
-client = InferenceHTTPClient(
-    api_url="https://detect.roboflow.com",
-    api_key="OPbzKBpjX4FDciwm3Bk3"
-)
+# Simulasi (placeholder) hasil deteksi
+def mock_draw_results(image):
+    img = np.array(image.convert("RGB"))
+    class_counts = Counter({"Matang": 3, "Mengkal": 1, "Mentah": 2})  # Contoh jumlah deteksi
 
-# Streamlit UI
-st.title('Deteksi Objek dengan Roboflow')
-uploaded_image = st.file_uploader("Pilih gambar untuk dianalisis", type=["jpg", "png", "jpeg"])
+    # Buat rectangle dummy
+    h, w, _ = img.shape
+    cv2.rectangle(img, (10, 10), (w//3, h//4), (0, 255, 0), 2)
+    cv2.putText(img, "Matang: 0.85", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-if uploaded_image is not None:
-    image = Image.open(uploaded_image)
-    st.image(image, caption="Gambar yang diupload", use_column_width=True)
+    return img, class_counts
 
-    img_bytes = uploaded_image.getvalue()
+# Streamlit App UI
+st.title("Deteksi dan Klasifikasi Kematangan Buah Sawit")
 
-    # Ganti dengan model_id kamu, biasanya seperti "workspace/project/version"
-    model_id = "saraswanti/detect-count-and-visualize-3/1"
+st.image("Buah-Kelapa-Sawit.jpg", use_column_width=True)
 
-    result = client.infer(model_id, image=img_bytes)
+# Pilihan metode input
+option = st.radio("Pilih metode input gambar:", ("Upload Gambar", "Gunakan Kamera"))
 
-    # Menampilkan hasil deteksi
-    st.subheader("Hasil Deteksi:")
-    for prediction in result["predictions"]:
-        st.write(f"Label: {prediction['class']} - Confidence: {prediction['confidence']*100:.2f}% - BBox: {prediction['x']}, {prediction['y']}, {prediction['width']}, {prediction['height']}")
+image = None
+
+if option == "Upload Gambar":
+    uploaded_file = st.file_uploader("Unggah gambar", type=["jpg", "jpeg", "png"])
+    if uploaded_file:
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Gambar yang diunggah", use_column_width=True)
+
+elif option == "Gunakan Kamera":
+    camera_file = st.camera_input("Ambil gambar dengan kamera")
+    if camera_file:
+        image = Image.open(camera_file)
+        st.image(image, caption="Gambar dari Kamera", use_column_width=True)
+
+# Proses prediksi dummy
+if image and st.button("Prediksi"):
+    st.warning("Model YOLOv8 belum tersedia. Menampilkan hasil simulasi prediksi.")
+
+    processed_image, class_counts = mock_draw_results(image)
+    st.image(processed_image, caption="Hasil Deteksi (Simulasi)", use_column_width=True)
+
+    st.subheader("Jumlah Objek per Kelas (Simulasi)")
+    for class_name, count in class_counts.items():
+        st.write(f"{class_name}: {count}")
