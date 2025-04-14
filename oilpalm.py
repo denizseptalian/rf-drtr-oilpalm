@@ -13,8 +13,7 @@ st.set_page_config(page_title="Deteksi Buah Sawit", layout="centered")
 # Load YOLO model
 @st.cache_resource
 def load_model():
-    model = YOLO("best.pt")
-    return model
+    return YOLO("best.pt")
 
 def predict_image(model, image):
     image = np.array(image.convert("RGB"))
@@ -33,10 +32,10 @@ def draw_results(image, results):
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
             class_id = int(box.cls[0].item())
             label = f"{names[class_id]}: {box.conf[0]:.2f}"
-
             class_counts[names[class_id]] += 1
             cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            cv2.putText(img, label, (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
     return img, class_counts
 
@@ -45,9 +44,7 @@ st.title("📷 Deteksi dan Klasifikasi Kematangan Buah Sawit")
 if os.path.exists("Buah-Kelapa-Sawit.jpg"):
     st.image("Buah-Kelapa-Sawit.jpg", use_container_width=True)
 
-# Input metode
 option = st.radio("Pilih metode input gambar:", ("Upload Gambar", "Gunakan Kamera (Flip)"))
-
 image = None
 
 if option == "Upload Gambar":
@@ -57,72 +54,69 @@ if option == "Upload Gambar":
         st.image(image, caption="Gambar yang diunggah", use_container_width=True)
 
 elif option == "Gunakan Kamera (Flip)":
-    st.markdown("### Kamera (Depan ↔ Belakang)")
+    st.markdown("### Kamera Flip (Depan ↔ Belakang)")
 
-    # HTML + JS untuk flip kamera
-    js_code = """
+    html_code = """
+    <!DOCTYPE html>
+    <html>
+    <body>
+    <video id="video" width="100%" autoplay playsinline style="border:1px solid gray;"></video><br>
+    <button onclick="flipCamera()">🔄 Flip Kamera</button>
+    <button onclick="takePhoto()">📸 Ambil Gambar</button>
+    <canvas id="canvas" style="display:none;"></canvas>
     <script>
-      let useBackCamera = true;
-      let currentStream;
+    let useBackCamera = true;
+    let stream;
 
-      async function startCamera() {
-        if (currentStream) {
-          currentStream.getTracks().forEach(track => track.stop());
+    async function startCamera() {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
         }
-
         const constraints = {
-          video: {
-            facingMode: useBackCamera ? { exact: "environment" } : "user"
-          }
+            video: {
+                facingMode: useBackCamera ? { exact: "environment" } : "user"
+            }
         };
-
         try {
-          currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-          const video = document.getElementById("video");
-          video.srcObject = currentStream;
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            document.getElementById('video').srcObject = stream;
         } catch (err) {
-          alert("Gagal mengakses kamera: " + err.message);
+            alert("Tidak dapat mengakses kamera: " + err.message);
         }
-      }
+    }
 
-      function flipCamera() {
+    function flipCamera() {
         useBackCamera = !useBackCamera;
         startCamera();
-      }
+    }
 
-      function takePhoto() {
-        const video = document.getElementById("video");
-        const canvas = document.getElementById("canvas");
+    function takePhoto() {
+        const canvas = document.getElementById('canvas');
+        const video = document.getElementById('video');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
         const dataUrl = canvas.toDataURL('image/png');
+        const input = window.parent.document.querySelector("input#camera_image_input");
+        input.value = dataUrl;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
 
-        // Kirim ke Streamlit
-        const imageInput = window.parent.document.querySelector("input#camera_image_input");
-        imageInput.value = dataUrl;
-        imageInput.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-
-      window.onload = startCamera;
+    window.onload = startCamera;
     </script>
-    <video id="video" autoplay playsinline style="width: 100%; border: 1px solid gray;"></video>
-    <canvas id="canvas" style="display: none;"></canvas><br>
-    <button onclick="flipCamera()">🔄 Flip Kamera</button>
-    <button onclick="takePhoto()">📸 Ambil Gambar</button>
+    </body>
+    </html>
     """
 
-    # Render JS kamera
-    st.components.v1.html(js_code, height=480)
+    st.components.v1.html(html_code, height=500)
 
-    # Hidden input untuk ambil hasil Base64
-    base64_img = st.text_input("📷 Gambar kamera:", key="camera_image_input", label_visibility="collapsed")
+    base64_img = st.text_input("📷 Hasil Kamera (tersembunyi)", key="camera_image_input", label_visibility="collapsed")
 
     if base64_img:
         header, encoded = base64_img.split(",", 1)
-        decoded_bytes = base64.b64decode(encoded)
-        image = Image.open(BytesIO(decoded_bytes))
-        st.image(image, caption="📷 Gambar dari Kamera", use_container_width=True)
+        decoded = base64.b64decode(encoded)
+        image = Image.open(BytesIO(decoded))
+        st.image(image, caption="Gambar dari Kamera", use_container_width=True)
 
 # Prediksi
 if image and st.button("Prediksi"):
