@@ -4,11 +4,13 @@ import numpy as np
 from PIL import Image
 from collections import Counter
 import os
-
-# Import YOLOv8
+import base64
+from io import BytesIO
 from ultralytics import YOLO
 
-# Load model hanya sekali
+st.set_page_config(page_title="Deteksi Buah Sawit", layout="centered")
+
+# Load YOLO model
 @st.cache_resource
 def load_model():
     model = YOLO("best.pt")
@@ -38,15 +40,13 @@ def draw_results(image, results):
 
     return img, class_counts
 
-# UI Aplikasi
-st.title("Deteksi dan Klasifikasi Kematangan Buah Sawit")
+st.title("📷 Deteksi dan Klasifikasi Kematangan Buah Sawit")
 
-# Tampilkan ilustrasi jika tersedia
 if os.path.exists("Buah-Kelapa-Sawit.jpg"):
     st.image("Buah-Kelapa-Sawit.jpg", use_container_width=True)
 
-# Pilihan input
-option = st.radio("Pilih metode input gambar:", ("Upload Gambar", "Gunakan Kamera"))
+# Input metode
+option = st.radio("Pilih metode input gambar:", ("Upload Gambar", "Gunakan Kamera (Flip)"))
 
 image = None
 
@@ -56,11 +56,73 @@ if option == "Upload Gambar":
         image = Image.open(uploaded_file)
         st.image(image, caption="Gambar yang diunggah", use_container_width=True)
 
-elif option == "Gunakan Kamera":
-    camera_file = st.camera_input("Ambil gambar dengan kamera")
-    if camera_file:
-        image = Image.open(camera_file)
-        st.image(image, caption="Gambar dari Kamera", use_container_width=True)
+elif option == "Gunakan Kamera (Flip)":
+    st.markdown("### Kamera (Depan ↔ Belakang)")
+
+    # HTML + JS untuk flip kamera
+    js_code = """
+    <script>
+      let useBackCamera = true;
+      let currentStream;
+
+      async function startCamera() {
+        if (currentStream) {
+          currentStream.getTracks().forEach(track => track.stop());
+        }
+
+        const constraints = {
+          video: {
+            facingMode: useBackCamera ? { exact: "environment" } : "user"
+          }
+        };
+
+        try {
+          currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+          const video = document.getElementById("video");
+          video.srcObject = currentStream;
+        } catch (err) {
+          alert("Gagal mengakses kamera: " + err.message);
+        }
+      }
+
+      function flipCamera() {
+        useBackCamera = !useBackCamera;
+        startCamera();
+      }
+
+      function takePhoto() {
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        const dataUrl = canvas.toDataURL('image/png');
+
+        // Kirim ke Streamlit
+        const imageInput = window.parent.document.querySelector("input#camera_image_input");
+        imageInput.value = dataUrl;
+        imageInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+
+      window.onload = startCamera;
+    </script>
+    <video id="video" autoplay playsinline style="width: 100%; border: 1px solid gray;"></video>
+    <canvas id="canvas" style="display: none;"></canvas><br>
+    <button onclick="flipCamera()">🔄 Flip Kamera</button>
+    <button onclick="takePhoto()">📸 Ambil Gambar</button>
+    """
+
+    # Render JS kamera
+    st.components.v1.html(js_code, height=480)
+
+    # Hidden input untuk ambil hasil Base64
+    base64_img = st.text_input("📷 Gambar kamera:", key="camera_image_input", label_visibility="collapsed")
+
+    if base64_img:
+        header, encoded = base64_img.split(",", 1)
+        decoded_bytes = base64.b64decode(encoded)
+        image = Image.open(BytesIO(decoded_bytes))
+        st.image(image, caption="📷 Gambar dari Kamera", use_container_width=True)
 
 # Prediksi
 if image and st.button("Prediksi"):
@@ -71,6 +133,6 @@ if image and st.button("Prediksi"):
 
         st.image(processed_image, caption="Hasil Deteksi", use_container_width=True)
 
-        st.subheader("Jumlah Objek per Kelas")
+        st.subheader("Jumlah Objek Terdeteksi:")
         for class_name, count in class_counts.items():
-            st.write(f"{class_name}: {count}")
+            st.write(f"- **{class_name}**: {count}")
